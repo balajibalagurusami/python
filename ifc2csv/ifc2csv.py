@@ -1,4 +1,4 @@
-# (CC) balaji.work
+# (CC0) balaji.work
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
