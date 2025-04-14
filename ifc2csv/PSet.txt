@@ -1,0 +1,20 @@
+CCILevel1ParentLocationID
+CCILevel1ParentTypeID
+CCILevel2ParentLocationID
+CCILevel2ParentTypeID
+CCILocationID
+CCIMultiLevelLocationID
+CCIMultiLevelTypeID
+GlobalId
+Name
+Type
+OR_TE_ATR Code-CONST Type
+OR_TE_Document Name
+OR_TE_GeoLoc Code
+OR_TE_Structural Material
+OR_TE_Structural Material Density
+OR_TE_Structural Material Units
+OR_TE_Sub-material
+OR_TE_Sub-material Ratio
+OR_TE_Sub-material Units
+Volume
