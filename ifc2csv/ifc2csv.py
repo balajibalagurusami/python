@@ -1,5 +1,5 @@
 # (CC0) balaji.work
-
+# Updated to have any paramters exported from IFC Models
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import ifcopenshell
@@ -20,11 +20,6 @@ if getattr(sys, 'frozen', False):
     log_errors_to_file()
 
 # Global variables
-CCI_COLUMNS = [
-    "CCILevel1ParentLocationID", "CCILevel1ParentTypeID",
-    "CCILevel2ParentLocationID", "CCILevel2ParentTypeID",
-    "CCILocationID", "CCIMultiLevelLocationID", "CCIMultiLevelTypeID"
-]
 selected_properties = set()
 
 
@@ -46,6 +41,8 @@ def extract_ifc_properties(ifc_file_path, output_csv_path):
     elements = ifc_file.by_type("IfcElement")
 
     element_data = []
+    all_columns = set()
+
     for element in elements:
         element_id = element.GlobalId
         element_name = element.Name if element.Name else "Unknown"
@@ -59,15 +56,15 @@ def extract_ifc_properties(ifc_file_path, output_csv_path):
                     if hasattr(prop_set, "HasProperties"):
                         for prop in prop_set.HasProperties:
                             if hasattr(prop, "Name") and hasattr(prop, "NominalValue"):
-                                if not selected_properties or prop.Name in selected_properties:
-                                    properties[prop.Name] = prop.NominalValue.wrappedValue
+                                prop_name = prop.Name
+                                prop_value = prop.NominalValue.wrappedValue
+                                properties[prop_name] = prop_value
+                                all_columns.add(prop_name)
 
         element_data.append(properties)
 
-    # Prepare final column order with CCI columns first
-    all_columns = set().union(*(data.keys() for data in element_data))
-    other_columns = sorted(all_columns - set(CCI_COLUMNS))
-    final_columns = ["GlobalId", "Name", "Type"] + [col for col in CCI_COLUMNS if col in all_columns] + other_columns
+    # Prepare final column order with dynamically added columns
+    final_columns = ["GlobalId", "Name", "Type"] + sorted(all_columns)
 
     # Write to CSV
     with open(output_csv_path, mode="w", newline="", encoding="utf-8") as csv_file:
@@ -128,9 +125,7 @@ def create_combined_excel(output_dir):
                 combined_data.append(df)
 
     if combined_data:
-        # Prioritize CCI columns and maintain user-defined columns
-        other_columns = sorted(all_columns - set(CCI_COLUMNS))
-        final_columns = ["GlobalId", "Name", "Type"] + [col for col in CCI_COLUMNS if col in all_columns] + other_columns
+        final_columns = sorted(all_columns)
         final_df = pd.concat(combined_data, ignore_index=True, sort=False)
         final_df = final_df.reindex(columns=final_columns)
     else:
