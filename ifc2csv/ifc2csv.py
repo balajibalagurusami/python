@@ -10,6 +10,7 @@ import pandas as pd
 import webbrowser
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
+from datetime import datetime  # For timestamp in Excel filename
 
 # Log errors to a file when running as an exe
 def log_errors_to_file(log_file="error_log.txt"):
@@ -21,7 +22,8 @@ if getattr(sys, 'frozen', False):
 
 # Global variables
 selected_properties = set()
-
+available_properties = []
+parameter_checkboxes = []  # Initialize the list of checkboxes
 
 # Load user-defined properties from txt file
 def load_selected_properties(file_path):
@@ -36,6 +38,7 @@ def load_selected_properties(file_path):
 
 # Extract properties from IFC file
 def extract_ifc_properties(ifc_file_path, output_csv_path):
+    global available_properties
     print(f"Processing: {ifc_file_path}")
     ifc_file = ifcopenshell.open(ifc_file_path)
     elements = ifc_file.by_type("IfcElement")
@@ -62,6 +65,9 @@ def extract_ifc_properties(ifc_file_path, output_csv_path):
                                 all_columns.add(prop_name)
 
         element_data.append(properties)
+
+    # Store available properties for checkbox selection
+    available_properties = sorted(all_columns)
 
     # Prepare final column order with dynamically added columns
     final_columns = ["GlobalId", "Name", "Type"] + sorted(all_columns)
@@ -110,21 +116,33 @@ def process_ifc_directory(input_dir, output_dir):
                 except Exception as e:
                     print(f"Error processing {input_file_path}: {str(e)}")
 
+    # After processing all IFC files, load the checkboxes for parameters
+    load_checkboxes()
+
 
 # Combine all CSVs and create a validation Excel file
 def create_combined_excel(output_dir):
+    global selected_properties
     combined_data = []
     all_columns = set()
 
+    # Loop through all CSV files and load them into a dataframe
     for root, _, files in os.walk(output_dir):
         for file_name in files:
             if file_name.lower().endswith(".csv"):
                 csv_file_path = os.path.join(root, file_name)
                 df = pd.read_csv(csv_file_path)
+
+                # If selected_properties is not empty, filter the dataframe based on selected columns
+                if selected_properties:
+                    # Include only the columns that are selected by the user
+                    df = df[[col for col in df.columns if col in selected_properties]]
                 all_columns.update(df.columns)
                 combined_data.append(df)
 
+    # Ensure that there is data to combine
     if combined_data:
+        # Ensure that all columns are included in the final dataframe
         final_columns = sorted(all_columns)
         final_df = pd.concat(combined_data, ignore_index=True, sort=False)
         final_df = final_df.reindex(columns=final_columns)
@@ -132,15 +150,21 @@ def create_combined_excel(output_dir):
         print("No valid data found. Creating an empty validation file.")
         final_df = pd.DataFrame(columns=all_columns)
 
-    validation_file = os.path.join(output_dir, "validation_output.xlsx")
+    # Define the validation Excel file path with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    validation_file = os.path.join(output_dir, f"validation_output_{timestamp}.xlsx")
     print(f"Saving validation file to: {validation_file}")
 
     try:
+        # Save the dataframe to Excel
         final_df.to_excel(validation_file, index=False)
+
+        # Validate the Excel and apply any necessary formatting
         validate_excel(validation_file)
+        
         print(f"Validation file created at: {validation_file}")
 
-        # Show clickable link to open the file
+        # Show a clickable link to open the Excel file
         messagebox.showinfo(
             "Processing Complete",
             f"Processing complete!\n\nClick 'OK' to open the validation file.",
@@ -213,11 +237,18 @@ def select_property_list_file():
 
 # Start processing
 def start_processing():
+    global selected_properties
+    selected_properties = [param.get() for param in parameter_checkboxes if param.get()]
+
     input_dir = input_dir_entry.get()
     output_dir = output_dir_entry.get()
 
     if not input_dir or not output_dir:
         messagebox.showerror("Error", "Please select both input and output directories.")
+        return
+
+    if not selected_properties:
+        messagebox.showerror("Error", "Please select at least one parameter to export.")
         return
 
     try:
@@ -263,8 +294,50 @@ tk.Button(app, text="Load Property List", command=select_property_list_file).pac
 property_file_label = tk.Label(app, text="No property list loaded.")
 property_file_label.pack(pady=5)
 
+# Scrollable frame for parameters
+scroll_frame = tk.Frame(app)
+scroll_frame.pack(pady=10)
+
+# Create canvas and scrollbar for scrolling
+canvas = tk.Canvas(scroll_frame)
+scrollbar = tk.Scrollbar(scroll_frame, orient="vertical", command=canvas.yview)
+canvas.config(yscrollcommand=scrollbar.set)
+
+scrollable_frame = tk.Frame(canvas)
+
+# Create the window inside the canvas
+canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+scrollbar.pack(side="right", fill="y")
+canvas.pack(side="left", fill="both", expand=True)
+
+def load_checkboxes():
+    global parameter_checkboxes
+    # Clear previous checkboxes
+    for widget in scrollable_frame.winfo_children():
+        widget.destroy()
+
+    parameter_checkboxes = []
+
+    for param in available_properties:
+        var = tk.BooleanVar()
+        cb = tk.Checkbutton(scrollable_frame, text=param, variable=var)
+        cb.pack(anchor="w")
+        parameter_checkboxes.append(var)
+
+    # Update scroll region
+    scrollable_frame.update_idletasks()
+    canvas.config(scrollregion=canvas.bbox("all"))
+
+    # Enable the Start Processing button after loading checkboxes
+    start_button.config(state="normal")
+
+# "Get Available Parameters" Button
+tk.Button(app, text="Get Available Parameters", command=lambda: process_ifc_directory(input_dir_entry.get(), output_dir_entry.get())).pack(pady=5)
+
 # Start button and progress bar
-tk.Button(app, text="Start Processing", command=start_processing).pack(pady=10)
+start_button = tk.Button(app, text="Start Processing", command=start_processing, state="disabled")
+start_button.pack(pady=10)
 progress_var = tk.DoubleVar()
 progress_bar = ttk.Progressbar(app, variable=progress_var, length=400)
 progress_bar.pack(pady=5)
